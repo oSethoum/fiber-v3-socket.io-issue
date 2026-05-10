@@ -3,7 +3,7 @@ module app
 go 1.26.2
 
 require (
-	github.com/gofiber/contrib/v3/socketio v1.1.3
+	github.com/gofiber/contrib/v3/socketio v1.2.0
 	github.com/gofiber/fiber/v3 v3.2.0
 )
 
@@ -27,5 +27,3 @@ require (
 	golang.org/x/sys v0.44.0 // indirect
 	golang.org/x/text v0.37.0 // indirect
 )
-
-replace github.com/gofiber/contrib/v3/socketio => /home/coder/go/src/github/contrib/v3/socketio
