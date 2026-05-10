@@ -1,0 +1,381 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Fiber V3 Socket.IO Test Client (WS + Polling)</title>
+        <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+        <style>
+            body {
+                font-family: system-ui, sans-serif;
+                max-width: 900px;
+                margin: 2rem auto;
+                padding: 0 1rem;
+            }
+            .card {
+                border: 1px solid #ddd;
+                border-radius: 8px;
+                padding: 1rem;
+                margin: 1rem 0;
+            }
+            .status {
+                padding: 0.5rem 1rem;
+                border-radius: 4px;
+                margin: 1rem 0;
+                font-weight: 500;
+            }
+            .connected {
+                background: #d4edda;
+                color: #155724;
+            }
+            .disconnected {
+                background: #f8d7da;
+                color: #721c24;
+            }
+            .message {
+                padding: 0.75rem;
+                border-left: 3px solid #007bff;
+                margin: 0.5rem 0;
+                background: #f8f9fa;
+            }
+            .server {
+                border-left-color: #28a745;
+            }
+            .controls {
+                display: flex;
+                gap: 0.5rem;
+                margin: 1rem 0;
+                flex-wrap: wrap;
+                align-items: center;
+            }
+            button {
+                padding: 0.5rem 1rem;
+                cursor: pointer;
+                background: #007bff;
+                color: white;
+                border: none;
+                border-radius: 4px;
+            }
+            button:hover {
+                background: #0056b3;
+            }
+            button.secondary {
+                background: #6c757d;
+            }
+            button.secondary:hover {
+                background: #545b62;
+            }
+            input,
+            select {
+                padding: 0.5rem;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+            }
+            #log {
+                max-height: 400px;
+                overflow-y: auto;
+                border: 1px solid #ddd;
+                padding: 1rem;
+                background: #fff;
+                border-radius: 4px;
+            }
+            .error {
+                color: #dc3545;
+            }
+            .ack {
+                color: #6f42c1;
+                font-style: italic;
+            }
+            .transport-badge {
+                display: inline-block;
+                padding: 0.25rem 0.5rem;
+                background: #e9ecef;
+                border-radius: 3px;
+                font-size: 0.85rem;
+            }
+            .info-grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+                gap: 0.5rem;
+                margin: 1rem 0;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>🧪 Socket.IO Test Client</h1>
+        <p><em>Supports WebSocket + HTTP Long-Polling fallback</em></p>
+
+        <div id="status" class="status disconnected">Disconnected</div>
+
+        <div class="card">
+            <h3>⚙️ Connection Settings</h3>
+            <div class="info-grid">
+                <div>
+                    <label>Transport:</label>
+                    <select id="transport">
+                        <option value="">Auto (WebSocket + Polling)</option>
+                        <option value="websocket">WebSocket Only</option>
+                        <option value="polling">Polling Only</option>
+                    </select>
+                </div>
+                <div>
+                    <label>Auth Token:</label>
+                    <input
+                        type="text"
+                        id="token"
+                        placeholder="optional"
+                        value="test-token-123"
+                    />
+                </div>
+                <div>
+                    <label>Username:</label>
+                    <input
+                        type="text"
+                        id="user"
+                        placeholder="optional"
+                        value="test-user"
+                    />
+                </div>
+                <div>
+                    <label>Send IP:</label>
+                    <input type="checkbox" id="sendIp" checked />
+                </div>
+            </div>
+            <div class="controls">
+                <button onclick="connect()">🔌 Connect</button>
+                <button onclick="disconnect()" class="secondary">
+                    ❌ Disconnect
+                </button>
+                <button onclick="reconnect()">🔄 Reconnect</button>
+                <span id="transportInfo" class="transport-badge"
+                    >Transport: —</span
+                >
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>📤 Send Events</h3>
+            <div class="controls">
+                <input
+                    type="text"
+                    id="messageInput"
+                    placeholder="Type a message..."
+                />
+                <button onclick="sendMessage()">📤 Send Message</button>
+                <button onclick="sendPing()">🏓 Send Ping</button>
+                <button onclick="sendChat()">💬 Send Chat</button>
+            </div>
+        </div>
+
+        <div class="card">
+            <h3>📋 Event Log</h3>
+            <div id="log"></div>
+            <div class="controls">
+                <button onclick="clearLog()" class="secondary">
+                    🗑️ Clear Log
+                </button>
+                <button onclick="copyLog()" class="secondary">
+                    📋 Copy Log
+                </button>
+            </div>
+        </div>
+
+        <script>
+            let socket;
+            const log = document.getElementById("log");
+            const status = document.getElementById("status");
+            const transportInfo = document.getElementById("transportInfo");
+
+            function addLog(text, className = "") {
+                const entry = document.createElement("div");
+                entry.className = "message " + className;
+                entry.innerHTML =
+                    "<small>" +
+                    new Date().toLocaleTimeString() +
+                    "</small> " +
+                    text;
+                log.appendChild(entry);
+                log.scrollTop = log.scrollHeight;
+            }
+
+            function updateStatus(connected, transport = null) {
+                status.className =
+                    "status " + (connected ? "connected" : "disconnected");
+                status.textContent = connected
+                    ? "✅ Connected"
+                    : "❌ Disconnected";
+                if (transport) {
+                    transportInfo.textContent = "Transport: " + transport;
+                }
+            }
+
+            function connect() {
+                if (socket?.connected) {
+                    socket.disconnect();
+                }
+
+                const token = document.getElementById("token").value;
+                const user = document.getElementById("user").value;
+                const transportVal = document.getElementById("transport").value;
+                const sendIp = document.getElementById("sendIp").checked;
+
+                // Build connection options
+                const opts = {
+                    // Auto-detect or force transport
+                    transports: transportVal
+                        ? [transportVal]
+                        : ["websocket", "polling"],
+                    // Auth payload for handshake
+                    auth: token || user ? { token, user } : undefined,
+                    // Optional: send client IP as query param (for server logging)
+                    query: sendIp ? { ip: "client-side-ip" } : undefined,
+                    // Socket.IO options
+                    reconnection: false, // Manual reconnect for testing
+                    timeout: 20000,
+                };
+
+                addLog(`🔌 Connecting with options: ${JSON.stringify(opts)}`);
+
+                socket = io("http://localhost:3000", opts);
+
+                socket.on("connect", () => {
+                    updateStatus(true, socket.io.engine.transport.name);
+                    addLog(
+                        `✅ Connected! Socket ID: ${socket.id}, Transport: ${socket.io.engine.transport.name}`,
+                    );
+                });
+
+                socket.on("connect_error", (err) => {
+                    updateStatus(false);
+                    addLog(`❌ Connection error: ${err.message}`, "error");
+                    console.error("Connect error:", err);
+                });
+
+                socket.on("disconnect", (reason) => {
+                    updateStatus(false);
+                    addLog(`🔌 Disconnected: ${reason}`);
+                });
+
+                // Server welcome message
+                socket.on("welcome", (data) => {
+                    addLog(`🎉 ${data.content}`, "server");
+                });
+
+                // Server-initiated event with ack
+                socket.on("server_event", (data, callback) => {
+                    addLog(
+                        `🔄 Server event: ${JSON.stringify(data)}`,
+                        "server",
+                    );
+                    if (typeof callback === "function") {
+                        callback({
+                            received: true,
+                            client_time: new Date().toISOString(),
+                        });
+                        addLog("✅ Sent ack to server", "ack");
+                    }
+                });
+
+                // Broadcasted messages from other clients
+                socket.on("message", (data) => {
+                    addLog(`📨 ${data.from}: ${data.content}`);
+                });
+
+                // Transport upgrade event (polling → websocket)
+                socket.io.engine.on("upgrade", (transport) => {
+                    addLog(
+                        `🚀 Transport upgraded to: ${transport.name}`,
+                        "server",
+                    );
+                    updateStatus(true, transport.name);
+                });
+            }
+
+            function disconnect() {
+                if (socket) {
+                    socket.disconnect();
+                    addLog("👋 Disconnected by user");
+                    updateStatus(false);
+                }
+            }
+
+            function reconnect() {
+                disconnect();
+                setTimeout(connect, 500);
+            }
+
+            function sendMessage() {
+                if (!socket?.connected) {
+                    addLog("❌ Not connected", "error");
+                    return;
+                }
+
+                const input = document.getElementById("messageInput");
+                const content = input.value.trim();
+                if (!content) return;
+
+                const msg = {
+                    from: document.getElementById("user").value || "anonymous",
+                    content: content,
+                };
+
+                socket.emit("message", msg, (response) => {
+                    addLog(
+                        "✅ Message ack: " + JSON.stringify(response),
+                        "ack",
+                    );
+                });
+
+                addLog("📤 Sent: " + content);
+                input.value = "";
+            }
+
+            function sendPing() {
+                if (!socket?.connected) {
+                    addLog("❌ Not connected", "error");
+                    return;
+                }
+
+                socket.emit("ping", { ts: Date.now() }, (pong) => {
+                    addLog("🏓 Pong received: " + JSON.stringify(pong), "ack");
+                });
+                addLog("🏓 Sent ping");
+            }
+
+            function sendChat() {
+                if (!socket?.connected) {
+                    addLog("❌ Not connected", "error");
+                    return;
+                }
+
+                const room = "general";
+                const message =
+                    "Hello from " +
+                    (document.getElementById("user").value || "anonymous");
+
+                socket.emit("chat", room, message, (status, meta) => {
+                    addLog(
+                        "✅ Chat ack: " + JSON.stringify({ status, meta }),
+                        "ack",
+                    );
+                });
+                addLog(`💬 Sent to room [${room}]: ${message}`);
+            }
+
+            function clearLog() {
+                log.innerHTML = "";
+                addLog("🗑️ Log cleared");
+            }
+
+            function copyLog() {
+                const text = log.innerText;
+                navigator.clipboard.writeText(text).then(() => {
+                    addLog("📋 Log copied to clipboard");
+                });
+            }
+
+            // Auto-connect on page load (optional - comment out if you prefer manual)
+            // window.addEventListener('load', connect);
+        </script>
+    </body>
+</html>

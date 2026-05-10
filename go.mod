@@ -4,13 +4,13 @@ go 1.26.2
 
 require (
 	github.com/gofiber/contrib/v3/socketio v1.1.3
-	github.com/gofiber/contrib/v3/websocket v1.1.4
 	github.com/gofiber/fiber/v3 v3.2.0
 )
 
 require (
 	github.com/andybalholm/brotli v1.2.1 // indirect
 	github.com/fasthttp/websocket v1.5.12 // indirect
+	github.com/gofiber/contrib/v3/websocket v1.1.4 // indirect
 	github.com/gofiber/schema v1.7.1 // indirect
 	github.com/gofiber/utils/v2 v2.0.4 // indirect
 	github.com/google/uuid v1.6.0 // indirect
@@ -22,8 +22,10 @@ require (
 	github.com/tinylib/msgp v1.6.4 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasthttp v1.71.0 // indirect
-	golang.org/x/crypto v0.50.0 // indirect
-	golang.org/x/net v0.53.0 // indirect
-	golang.org/x/sys v0.43.0 // indirect
-	golang.org/x/text v0.36.0 // indirect
+	golang.org/x/crypto v0.51.0 // indirect
+	golang.org/x/net v0.54.0 // indirect
+	golang.org/x/sys v0.44.0 // indirect
+	golang.org/x/text v0.37.0 // indirect
 )
+
+replace github.com/gofiber/contrib/v3/socketio => /home/coder/go/src/github/contrib/v3/socketio
